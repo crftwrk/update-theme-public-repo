@@ -5,7 +5,7 @@
  * Supports: Custom server (private) + GitHub public releases
  *
  * @package Bootscore_Update_Checker
- * @version 6.8.0
+ * @version 6.5.0
  */
 
 
@@ -15,6 +15,11 @@ defined('ABSPATH') || exit;
 if (!class_exists('Bootscore_Update_Checker')) {
 
   class Bootscore_Update_Checker {
+
+    /**
+     * @var string Update server URL
+     */
+    private $server_url;
 
     /**
      * @var int Cache duration in seconds
@@ -29,9 +34,11 @@ if (!class_exists('Bootscore_Update_Checker')) {
     /**
      * Constructor
      *
-     * @param int $cache_time Cache duration in seconds
+     * @param string $server_url Update server URL (can be empty for GitHub-only)
+     * @param int    $cache_time Cache duration in seconds
      */
-    public function __construct($cache_time = 43200) {
+    public function __construct($server_url = '', $cache_time = 43200) {
+      $this->server_url = $server_url ? trailingslashit($server_url) : '';
       $this->cache_time = $cache_time;
 
       // Hook into WordPress
@@ -50,7 +57,7 @@ if (!class_exists('Bootscore_Update_Checker')) {
      *     @type string 'current_version' Current installed version
      *     @type string 'file'            Plugin file path or theme slug
      *     @type string 'source'          'custom' or 'github' (default: 'custom')
-     *     @type string 'info_url'        Full URL to info.json (for 'custom' source)
+     *     @type string 'server_path'     Path on update server (for 'custom' source)
      *     @type string 'github_repo'     GitHub repo 'owner/repo' (for 'github' source)
      *     @type string 'name'            Product name
      * }
@@ -62,22 +69,16 @@ if (!class_exists('Bootscore_Update_Checker')) {
         'current_version' => '0.0.0',
         'file' => '',
         'source' => 'custom', // 'custom' or 'github'
-        'info_url' => '',
+        'server_path' => '',
         'github_repo' => '',
         'name' => '',
       );
 
       $product = wp_parse_args($product, $defaults);
 
-      if (empty($product['slug'])) {
-        return;
-      }
-
-      if ($product['source'] === 'custom' && empty($product['info_url'])) {
-        if (defined('WP_DEBUG') && WP_DEBUG) {
-          error_log("Bootscore_Update_Checker: missing 'info_url' for product '{$product['slug']}'.");
-        }
-        return;
+      // Auto-detect server path if not provided and source is 'custom'
+      if (empty($product['server_path']) && $product['source'] === 'custom') {
+        $product['server_path'] = $product['type'] . 's/' . $product['slug'];
       }
 
       // Auto-detect name if not provided
@@ -96,60 +97,6 @@ if (!class_exists('Bootscore_Update_Checker')) {
      */
     private function get_product($slug) {
       return isset($this->products[$slug]) ? $this->products[$slug] : null;
-    }
-
-    /**
-     * Normalize an 'icons' object from remote data into a plain array,
-     * keeping only the keys WordPress recognizes and that are actually set.
-     *
-     * @param object|null $icons Raw icons object from remote info
-     * @return array
-     */
-    private function format_icons($icons) {
-      if (empty($icons)) {
-        return array();
-      }
-
-      $result = array();
-
-      foreach (array('svg', '2x', '1x', 'default') as $key) {
-        if (!empty($icons->{$key})) {
-          $result[$key] = $icons->{$key};
-        }
-      }
-
-      return $result;
-    }
-
-    /**
-     * Look for icon files bundled in the plugin's own 'assets' folder
-     * (e.g. assets/icon.svg), so icons don't need to be duplicated on
-     * the update server. Only applies to 'plugin' type products.
-     *
-     * @param object $product Product object
-     * @return array
-     */
-    private function get_local_icons($product) {
-      if ($product->type !== 'plugin' || empty($product->file)) {
-        return array();
-      }
-
-      $plugin_file = trailingslashit(WP_PLUGIN_DIR) . $product->file;
-      $plugin_dir = dirname($plugin_file);
-
-      $map = array(
-        'svg' => 'assets/icon.svg',
-      );
-
-      $icons = array();
-
-      foreach ($map as $key => $relative_path) {
-        if (file_exists($plugin_dir . '/' . $relative_path)) {
-          $icons[$key] = plugins_url($relative_path, $plugin_file);
-        }
-      }
-
-      return $icons;
     }
 
     /**
@@ -183,7 +130,12 @@ if (!class_exists('Bootscore_Update_Checker')) {
      */
     private function get_custom_server_info($slug, $force = false) {
       $product = $this->get_product($slug);
-      if (!$product || empty($product->info_url)) {
+      if (!$product) {
+        return null;
+      }
+
+      // Check if server_url is set
+      if (empty($this->server_url)) {
         return null;
       }
 
@@ -194,7 +146,8 @@ if (!class_exists('Bootscore_Update_Checker')) {
         return $cached;
       }
 
-      $response = wp_remote_get($product->info_url, array('timeout' => 10));
+      $url = $this->server_url . $product->server_path . '/info.json';
+      $response = wp_remote_get($url, array('timeout' => 10));
 
       if (is_wp_error($response) || 200 !== wp_remote_retrieve_response_code($response)) {
         return null;
@@ -305,7 +258,6 @@ if (!class_exists('Bootscore_Update_Checker')) {
           'changelog' => $changelog,
         ),
         'banners' => array(),
-        'icons' => array(),
         'homepage' => "https://github.com/{$product->github_repo}",
       );
     }
@@ -390,14 +342,6 @@ if (!class_exists('Bootscore_Update_Checker')) {
         );
       }
 
-      $icons = $this->get_local_icons($product);
-      if (empty($icons)) {
-        $icons = $this->format_icons($remote->icons ?? null);
-      }
-      if (!empty($icons)) {
-        $res->icons = $icons;
-      }
-
       return $res;
     }
 
@@ -434,14 +378,6 @@ if (!class_exists('Bootscore_Update_Checker')) {
           $res->requires_php = $update->requires_php;
         }
 
-        $icons = $this->get_local_icons($product);
-        if (empty($icons)) {
-          $icons = $this->format_icons($update->icons ?? null);
-        }
-        if (!empty($icons)) {
-          $res->icons = $icons;
-        }
-
         $transient->response[$product->file] = $res;
       }
 
@@ -466,7 +402,7 @@ if (!class_exists('Bootscore_Update_Checker')) {
           'theme' => $slug,
           'new_version' => $update->version,
           'package' => $update->download_url ?? '',
-          'url' => $update->homepage ?? '',
+          'url' => $update->homepage ?? $this->server_url,
         );
       }
 

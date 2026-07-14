@@ -5,7 +5,7 @@
  * Supports: Custom server (private) + GitHub public releases
  *
  * @package Bootscore_Update_Checker
- * @version 6.8.0
+ * @version 6.7.0
  */
 
 
@@ -119,37 +119,6 @@ if (!class_exists('Bootscore_Update_Checker')) {
       }
 
       return $result;
-    }
-
-    /**
-     * Look for icon files bundled in the plugin's own 'assets' folder
-     * (e.g. assets/icon.svg), so icons don't need to be duplicated on
-     * the update server. Only applies to 'plugin' type products.
-     *
-     * @param object $product Product object
-     * @return array
-     */
-    private function get_local_icons($product) {
-      if ($product->type !== 'plugin' || empty($product->file)) {
-        return array();
-      }
-
-      $plugin_file = trailingslashit(WP_PLUGIN_DIR) . $product->file;
-      $plugin_dir = dirname($plugin_file);
-
-      $map = array(
-        'svg' => 'assets/icon.svg',
-      );
-
-      $icons = array();
-
-      foreach ($map as $key => $relative_path) {
-        if (file_exists($plugin_dir . '/' . $relative_path)) {
-          $icons[$key] = plugins_url($relative_path, $plugin_file);
-        }
-      }
-
-      return $icons;
     }
 
     /**
@@ -390,10 +359,7 @@ if (!class_exists('Bootscore_Update_Checker')) {
         );
       }
 
-      $icons = $this->get_local_icons($product);
-      if (empty($icons)) {
-        $icons = $this->format_icons($remote->icons ?? null);
-      }
+      $icons = $this->format_icons($remote->icons ?? null);
       if (!empty($icons)) {
         $res->icons = $icons;
       }
@@ -434,10 +400,7 @@ if (!class_exists('Bootscore_Update_Checker')) {
           $res->requires_php = $update->requires_php;
         }
 
-        $icons = $this->get_local_icons($product);
-        if (empty($icons)) {
-          $icons = $this->format_icons($update->icons ?? null);
-        }
+        $icons = $this->format_icons($update->icons ?? null);
         if (!empty($icons)) {
           $res->icons = $icons;
         }
