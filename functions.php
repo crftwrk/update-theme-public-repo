@@ -6,12 +6,13 @@
  * @link https://developer.wordpress.org/themes/basics/theme-functions/
  *
  * @package Bootscore
- * @version 6.4.0
+ * @version 6.5.0
  */
 
 
 // Exit if accessed directly
 defined('ABSPATH') || exit;
+
 
 
 /**
@@ -75,9 +76,12 @@ if (defined('JETPACK__VERSION')) {
 }
 
 
-// Load the shared updater library
+/**
+ * Load the shared updater library
+ */
+// Enable the new updater in v7
 if (!class_exists('Bootscore_Update_Checker')) {
-    require_once get_template_directory() . '/inc/updater/class-update-checker.php';
+  require_once get_template_directory() . '/inc/updater/class-update-checker.php';
 }
 
 // Load theme's own update configuration

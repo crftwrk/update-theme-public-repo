@@ -5,7 +5,7 @@
  * Supports: Custom server (private) + GitHub public releases
  *
  * @package Bootscore_Update_Checker
- * @version 6.8.0
+ * @version 6.5.0
  */
 
 
